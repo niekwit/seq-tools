@@ -27,11 +27,14 @@ snakemake --forceall --rulegraph | grep -v '\-> 0\|0\[label = \"all\"' | dot -Tp
 
 # Dry run
 echo "Running dry run..."
-snakemake -np > /dev/null
+snakemake -np > dry_run.log
 if $? != 0; then
     echo "Dry run failed..."
-    snakemake -np
+    cat dry_run.log
     exit 1
+else 
+    echo "Dry run successful..."
+    rm dry_run.log
 fi
 
 # Run workflow
