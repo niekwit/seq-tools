@@ -1,6 +1,12 @@
 #!/bin/bash
 
-## Run this script from directory with config, reads and workflow folders present ##
+## Run this script from directory with fastq files in reads directory ##
+
+## User-specific variables
+PROFILE_DIR="/home/niek/.config/snakemake/standard/"
+WORKFLOW_URL="https://github.com/niekwit/damid-seq"
+WORKFLOW_VERSION="v0.4.0"
+
 
 # Check if mamba is installed
 CHECK=$(which mamba)
@@ -21,6 +27,20 @@ else
     mamba activate snakemake8
 fi
 
+# Save snakemake version to file
+snakemake --version > snakemake_version.txt
+
+# Check if snakefetch is installed
+CHECK=$(which snakefetch)
+if [ "$CHECK" == "" ]; then
+    echo "snakefetch not found..."
+    pip install snakefetch
+fi
+
+# Fetching workflow
+echo "Fetching workflow files..."
+snakefetch --url $WORKFLOW_URL --repo-version $WORKFLOW_VERSION
+
 # Create rule graph
 mkdir -p images
 snakemake --forceall --rulegraph | grep -v '\-> 0\|0\[label = \"all\"' | dot -Tpng > images/rule_graph.png
@@ -38,8 +58,7 @@ else
 fi
 
 # Run workflow
-PROFILE="/home/niek/.config/snakemake/standard/"
-snakemake --profile $PROFILE
+snakemake --profile $PROFILE_DIR
 
 # Create report
 snakemake --report report.html
