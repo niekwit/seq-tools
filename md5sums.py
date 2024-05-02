@@ -1,27 +1,36 @@
 #!/usr/bin/env python3
 """
-Checks md5sums of fastq files
+Checks md5sums of fastq files in parsed directory
 """
 import os
 import hashlib
 import glob
 import csv
+import sys
 
 def md5(file):
     """
     Calculate the md5sum of a file
     """
-    file = os.path.join("reads", file)
+    file = os.path.join(data_dir, file)
     hash_md5 = hashlib.md5()
     with open(file, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return(hash_md5.hexdigest())
 
+# Get reads directory from command line
+if len(sys.argv) == 1:
+    raise ValueError("Please provide the reads directory as an argument...")
+elif len(sys.argv) > 2:
+    raise ValueError("Please provide only one directory argument...")
+else:
+    data_dir = sys.argv[1]
+
 # Get md5sum files
-md5sum_files = glob.glob(os.path.join("reads","*.md5"))
+md5sum_files = glob.glob(os.path.join(data_dir, "*.md5"))
 if len(md5sum_files) == 0:
-    md5sum_files = glob.glob(os.path.join("reads","*.md5sums.txt"))
+    md5sum_files = glob.glob(os.path.join(data_dir, "*.md5sums.txt"))
     if len(md5sum_files) == 0:
         raise ValueError("No md5sum files found with extensions .md5 or .md5sums.txt...")
     
@@ -52,3 +61,4 @@ with open("md5sums.csv", "w") as outfile:
                                  md5sums_txt, 
                                  md5sums_calculated, 
                                  md5sums_txt == md5sums_calculated])
+print("Done!")
