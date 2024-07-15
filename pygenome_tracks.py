@@ -1,8 +1,9 @@
 """
 From a set of bigWig files, plot the regions of the genes in a list with pyGenomeTracks.
 
-A base .ini file has to be prepared first
+A base .ini file has to be prepared first. This will be copied and modified for each gene in the list.
 
+Steps:
 1. For each gene, extract the region of the gene.
 2. Find the maximum in that region in all bigwig files.
 3. Change .ini file for each gene with found maximum.
@@ -12,6 +13,7 @@ Run from Conda environment:
 mamba create -n tracks pybigwig=0.3.22 pygenometracks=3.9
 mamba activate tracks
 """
+
 import datetime
 import os
 import subprocess
@@ -49,6 +51,7 @@ parser.add_argument("--outdir", "-o",
 parser.add_argument("--format",
                     type=str,
                     default="pdf",
+                    choices=["pdf", "png", "svg"],
                     help="Output format")
 parser.add_argument("--dpi",
                     type=int,
@@ -80,16 +83,21 @@ with open(args.ini, "r") as f:
             file = line.split("=")[1].strip()
             bw = pyBigWig.open(file)
             bigwigs.append(bw)
-            
+if len(bigwigs) == 0:
+    raise ValueError(f"No bigWig files found in {args.ini}...")
+  
 # Open gene list
 genes = []
 with open(args.genes, "r") as f:
     for line in f:
         genes.append(line.strip())
+if len(genes):
+    raise ValueError(f"No genes found {args.genes}...")
 
 # Create tracks for each gene
 for gene in genes:
     logging.info(f"Extracting coordinates for {gene}...")
+    
     # Open GTF file and find gene regions
     cmd = f"""awk '{{if ($3 == "gene") {{print $0}}}}' {args.gtf} | grep -w 'gene_name "{gene}";' |awk '{{print $1, $4, $5, $7}}'"""
     logging.debug(f"Running command: {cmd}")
@@ -135,5 +143,6 @@ for gene in genes:
         continue
     
 logging.info("All done!")
+
 # Log end time
 logging.info(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
