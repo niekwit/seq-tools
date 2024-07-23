@@ -1,11 +1,11 @@
 """
 From a set of bigWig files, plot the regions of the genes in a list with pyGenomeTracks.
 
-A base .ini file has to be prepared first. This will be copied and modified for each gene in the list.
+A base .ini file has to be prepared first
 
-Steps:
 1. For each gene, extract the region of the gene.
 2. Find the maximum in that region in all bigwig files.
+    a. Use this value to set the plotting maximum in the .ini file.
 3. Change .ini file for each gene with found maximum.
 4. Run pygenometracks. 
 
@@ -35,12 +35,13 @@ parser.add_argument("--genes", "-g",
                     help="List of genes to plot (each gene on a new line)")
 parser.add_argument("--gtf",
                     type=str,
+                    required=True,
                     help="GTF file with gene annotations")
 parser.add_argument("--upstream", "-a",
                     type=int,
                     default=500,
                     help="Upstream region to add to gene region to plot")
-parser.add_argument("--downstream", "-d",
+parser.add_argument("--downstream", "-b",
                     type=int,
                     default=500,
                     help="Downstream region to add to gene region to plot")
@@ -51,12 +52,21 @@ parser.add_argument("--outdir", "-o",
 parser.add_argument("--format",
                     type=str,
                     default="pdf",
-                    choices=["pdf", "png", "svg"],
                     help="Output format")
 parser.add_argument("--dpi",
                     type=int,
                     default=300,
                     help="DPI of the output figure")
+parser.add_argument("--force",
+                    action="store_true",
+                    help="Force overwriting of existing files")
+
+def file_exists(file):
+    if os.path.exists(file) and not args.force:
+        logging.info(f"File {file} already exists. Skipping...")
+        return True
+    else:
+        return False
 
 # Parse arguments
 args = parser.parse_args()
@@ -65,14 +75,15 @@ args = parser.parse_args()
 os.makedirs(args.outdir, exist_ok=True)
 
 # Setup log file
-log_file = f"pyGenomeTracks_{os.path.basename(args.genes).split('.')[0]}.log"
+date_time = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+log_file = f"pyGenomeTracks_{os.path.basename(args.genes).split('.')[0]}_{date_time}.log"
 logging.basicConfig(format='%(levelname)s:%(message)s', 
                     level=logging.DEBUG,
                     handlers=[logging.FileHandler(log_file),
                               logging.StreamHandler()])
 
 # Log start time
-logging.info(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+logging.info(date_time)
 
 # Open bigWig files from ini file
 logging.info("Loading bigWig files...")
@@ -83,28 +94,26 @@ with open(args.ini, "r") as f:
             file = line.split("=")[1].strip()
             bw = pyBigWig.open(file)
             bigwigs.append(bw)
-if len(bigwigs) == 0:
-    raise ValueError(f"No bigWig files found in {args.ini}...")
-  
+   
 # Open gene list
 genes = []
 with open(args.genes, "r") as f:
     for line in f:
         genes.append(line.strip())
-if len(genes):
-    raise ValueError(f"No genes found {args.genes}...")
 
 # Create tracks for each gene
 for gene in genes:
     logging.info(f"Extracting coordinates for {gene}...")
-    
     # Open GTF file and find gene regions
     cmd = f"""awk '{{if ($3 == "gene") {{print $0}}}}' {args.gtf} | grep -w 'gene_name "{gene}";' |awk '{{print $1, $4, $5, $7}}'"""
     logging.debug(f"Running command: {cmd}")
     gene_info = subprocess.check_output(cmd, shell=True).decode("utf-8").strip().split("\n")
-    assert len(gene_info) == 1, f"Gene {gene} not found in GTF file or too many lines found"
-    chr, start, end, strand = gene_info[0].split()
-    
+    try:
+        chr, start, end, strand = gene_info[0].split()
+    except ValueError:
+        logging.error(f"Gene {gene} not found in GTF file...")
+        continue
+
     if strand == "+":
         start = int(start) - args.upstream
         end = int(end) + args.downstream
@@ -123,26 +132,28 @@ for gene in genes:
     # Copy ini file with gene specific values
     logging.info(f"Creating ini file for {gene}...")
     new_ini = os.path.join(os.path.dirname(args.ini), gene + ".ini")
-    shutil.copy(args.ini, new_ini)
+    if not file_exists(new_ini):
+        shutil.copy(args.ini, new_ini)
     sed = f"sed -i 's/#max_value = auto/max_value= {max_value}/g' {new_ini}"
     logging.debug(f"Running command: {sed}")
     subprocess.run(sed, shell=True)
-    
+
     # Run pyGenomeTracks
     logging.info(f"Running pyGenomeTracks for {gene}...")
     output = os.path.join(args.outdir, gene + "." + args.format)
-    tracks = f"pyGenomeTracks --tracks {new_ini} --region {chr}:{start}-{end} --outFileName {output} --dpi {args.dpi}"
-    logging.debug(f"Running command: {tracks}")
-    try:
-        stdout = subprocess.check_output(tracks, 
-                                        shell=True,
-                                        stderr=subprocess.STDOUT).decode("utf-8")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Error running pyGenomeTracks for {gene}")
-        logging.error(e.output.decode("utf-8"))
-        continue
     
-logging.info("All done!")
+    if not file_exists(output):
+        tracks = f"pyGenomeTracks --tracks {new_ini} --region {chr}:{start}-{end} --outFileName {output} --dpi {args.dpi}"
+        logging.debug(f"Running command: {tracks}")
+        try:
+            stdout = subprocess.check_output(tracks, 
+                                            shell=True,
+                                            stderr=subprocess.STDOUT).decode("utf-8")
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Error running pyGenomeTracks for {gene}")
+            logging.error(e.output.decode("utf-8"))
+            continue
 
+logging.info("All done!")
 # Log end time
-logging.info(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+logging.info(datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S'))
