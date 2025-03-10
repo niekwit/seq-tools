@@ -76,8 +76,8 @@ def get_fastq(srr, sample_name, paired):
     # Get first six characters of SRR
     ssr_prefix = srr[:6]
 
-    # Construct URLs for read 1 and read 2
-    base_url = f"{EBI_BASE_URL}/{ssr_prefix}/{srr_suffix}/{srr}/{srr}"
+    # Construct URLs for read 1( and read 2)
+    base_url = os.path.join(EBI_BASE_URL, ssr_prefix, srr_suffix, srr, srr)
     if paired:
         read_suffix = ["1", "2"]
         for suffix in read_suffix:
@@ -96,12 +96,16 @@ def main(args):
     OUTDIR = args.outdir
     os.makedirs(OUTDIR, exist_ok=True)
     csv_file = args.csv
-    paired = args.paired
 
     with open(csv_file, newline="") as f:
         reader = csv.reader(f)
         for row in reader:
             srr, sample_name = row
+
+            # Remove any leading/trailing white spaces
+            srr = srr.strip()
+            sample_name = sample_name.strip()
+
             get_fastq(srr, sample_name, args.paired)
 
 
